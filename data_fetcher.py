@@ -33,31 +33,35 @@ class DataFetcher:
                 print(f"✓ Real candles for {self.symbol}: {len(candles)}")
                 return candles
         except Exception as e:
-            print(f"Real data error for {self.symbol}: {e}")
+            print(f"Real data error: {e}")
         
-        # ----- MOCK CANDLES (ensures chart always shows) -----
-        print(f"⚠️ Generating mock candles for {self.symbol}")
+        # ----- FORCE MOCK CANDLES (so chart always shows) -----
+        print(f"⚠️ Generating 100 mock candles for {self.symbol}")
         candles = []
         now = datetime.now()
+        # Set a reasonable base price for the symbol
         base_price = 100.0
-        # Use different base price for different symbols to avoid flat lines
-        if self.symbol == "BTC-USD":
+        if "BTC" in self.symbol:
             base_price = 76000
-        elif self.symbol == "ETH-USD":
+        elif "ETH" in self.symbol:
             base_price = 3500
-        elif self.symbol == "DOGE-USD":
+        elif "DOGE" in self.symbol:
             base_price = 0.15
         elif self.symbol == "AAPL":
             base_price = 260
+        elif self.symbol == "NVDA":
+            base_price = 263
         elif self.symbol == "TSLA":
             base_price = 180
+        elif self.symbol == "MSFT":
+            base_price = 420
         else:
             base_price = 100
             
         price = base_price
         for i in range(100):
             ts = now - timedelta(minutes=5*i)
-            # Random walk
+            # Random walk (±2% per candle)
             price += random.uniform(-price*0.02, price*0.02)
             price = max(price, base_price*0.5)
             candles.append({
@@ -85,7 +89,16 @@ class DataFetcher:
             pass
         # Mock quote
         if not hasattr(self, 'mock_price'):
-            self.mock_price = 76000 if self.symbol == "BTC-USD" else 260
+            if "BTC" in self.symbol:
+                self.mock_price = 76000
+            elif "ETH" in self.symbol:
+                self.mock_price = 3500
+            elif "DOGE" in self.symbol:
+                self.mock_price = 0.15
+            elif self.symbol == "NVDA":
+                self.mock_price = 263
+            else:
+                self.mock_price = 100
         self.mock_price += random.uniform(-self.mock_price*0.005, self.mock_price*0.005)
         self.mock_price = max(self.mock_price, 10)
         return {
