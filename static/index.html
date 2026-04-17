@@ -2,11 +2,11 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Live Chart - Stock & Crypto Predictor</title>
+    <title>Live Stock & Crypto Predictor</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
             overflow: hidden;
@@ -80,11 +80,7 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         .content { padding: 20px; }
-        .stats {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
+        .stats { display: flex; gap: 15px; margin-bottom: 15px; }
         .card {
             flex: 1;
             text-align: center;
@@ -199,14 +195,12 @@
         const timestampEl = document.getElementById('timestamp');
         
         let ws = null;
-        let currentStock = 'DOGE-USD';  // Start with Dogecoin for frequent signals
+        let currentStock = 'DOGE-USD';
         let isMinimized = false;
-        
-        // Chart variables
         let chart = null;
         let candlestickSeries = null;
         
-        // Minimize
+        // Minimize/Restore
         function toggleMinimize() {
             if (!isMinimized) {
                 dashboardContent.style.display = 'none';
@@ -220,8 +214,7 @@
                 dashboard.style.minWidth = '';
                 minimizeBtn.textContent = '−';
                 isMinimized = false;
-                // Re-initialize chart if needed
-                if (!chart && document.getElementById('candlestickChart')) initChart();
+                if (!chart) initChart();
             }
         }
         minimizeBtn.addEventListener('click', toggleMinimize);
@@ -234,7 +227,7 @@
             else alert('Please allow popups for this site.');
         });
         
-        // Chart initialization
+        // Chart functions
         function initChart() {
             const chartElement = document.getElementById('candlestickChart');
             if (!chartElement) return;
@@ -327,22 +320,24 @@
             updateBoundary();
         });
         
-        // WebSocket
+        // WebSocket connection (dynamic URL for Render)
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = `${protocol}//${window.location.host}/ws`;
-ws = new WebSocket(wsUrl);
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            console.log('Connecting to WebSocket:', wsUrl);
+            ws = new WebSocket(wsUrl);
+            
             ws.onopen = () => {
-                console.log('✅ Connected');
+                console.log('✅ WebSocket connected');
                 signalEl.innerText = 'CONNECTED';
                 signalEl.className = 'signal hold';
             };
+            
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     console.log('Update:', data.symbol, data.price, data.prediction);
                     
-                    // Update price and signal
                     if (data.price) {
                         let currency = (data.symbol && data.symbol.includes('.NS')) ? '₹' : '$';
                         priceEl.innerText = `${currency}${data.price.toFixed(2)}`;
@@ -356,7 +351,6 @@ ws = new WebSocket(wsUrl);
                     if (data.accuracy !== undefined) accuracyEl.innerText = `${data.accuracy.toFixed(1)}%`;
                     if (data.timestamp) timestampEl.innerText = new Date(data.timestamp * 1000).toLocaleTimeString();
                     
-                    // Update chart
                     if (!chart) initChart();
                     if (data.historicalData && data.historicalData.length) {
                         updateChart(data.historicalData);
@@ -368,17 +362,31 @@ ws = new WebSocket(wsUrl);
                         stockSelect.value = data.symbol;
                         currentStock = data.symbol;
                     }
-                } catch(e) { console.error(e); }
+                } catch(e) {
+                    console.error('Parse error:', e);
+                }
             };
-            ws.onclose = () => setTimeout(connectWebSocket, 3000);
+            
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+                signalEl.innerText = 'ERROR';
+                signalEl.className = 'signal hold';
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket closed, reconnecting...');
+                setTimeout(connectWebSocket, 3000);
+            };
         }
         
-        // Stock change
+        // Stock selector change
         stockSelect.addEventListener('change', () => {
             const newStock = stockSelect.value;
             if (newStock === currentStock) return;
             currentStock = newStock;
-            if (ws && ws.readyState === WebSocket.OPEN) ws.send(`STOCK:${newStock}`);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(`STOCK:${newStock}`);
+            }
             priceEl.innerText = '$0.00';
             signalEl.innerText = 'LOADING...';
             signalEl.className = 'signal hold';
@@ -386,6 +394,7 @@ ws = new WebSocket(wsUrl);
             if (candlestickSeries) candlestickSeries.setData([]);
         });
         
+        // Start
         connectWebSocket();
         updateBoundary();
     </script>
