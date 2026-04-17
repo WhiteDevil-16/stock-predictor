@@ -111,6 +111,7 @@
             background: #1e1e2e;
             border-radius: 12px;
             padding: 10px;
+            min-height: 400px;
         }
         .info {
             text-align: center;
@@ -174,7 +175,7 @@
                 <div id="candlestickChart" style="width:100%; height:380px;"></div>
             </div>
             <div class="info">
-                🔄 Last update: <span id="timestamp">—</span> | 📡 Updates every 4s | 💡 Drag header | ⤴️ Popout
+                🔄 Last update: <span id="timestamp">—</span> | 📡 Updates every 2s | 💡 Drag header | ⤴️ Popout
             </div>
         </div>
     </div>
@@ -230,7 +231,10 @@
         // Chart functions
         function initChart() {
             const chartElement = document.getElementById('candlestickChart');
-            if (!chartElement) return;
+            if (!chartElement) {
+                console.error('Chart element not found');
+                return;
+            }
             chart = LightweightCharts.createChart(chartElement, {
                 width: chartElement.clientWidth,
                 height: 380,
@@ -250,9 +254,13 @@
             window.addEventListener('resize', () => {
                 if (chart) chart.applyOptions({ width: chartElement.clientWidth });
             });
+            console.log('Chart initialized');
         }
         
         function updateChart(historicalData) {
+            if (!candlestickSeries) {
+                initChart();
+            }
             if (!candlestickSeries || !historicalData || historicalData.length === 0) return;
             const candleData = historicalData.map(c => ({
                 time: c.time,
@@ -262,17 +270,23 @@
                 close: c.close
             }));
             candlestickSeries.setData(candleData);
+            console.log('Chart updated with', candleData.length, 'candles');
         }
         
         function addCandle(candle) {
-            if (!candlestickSeries || !candle) return;
-            candlestickSeries.update({
-                time: candle.time,
-                open: candle.open,
-                high: candle.high,
-                low: candle.low,
-                close: candle.close
-            });
+            if (!candlestickSeries) {
+                initChart();
+            }
+            if (candlestickSeries && candle) {
+                candlestickSeries.update({
+                    time: candle.time,
+                    open: candle.open,
+                    high: candle.high,
+                    low: candle.low,
+                    close: candle.close
+                });
+                console.log('Candle added:', candle.time, candle.close);
+            }
         }
         
         // Dragging with boundaries
@@ -336,7 +350,7 @@
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    console.log('Update:', data.symbol, data.price, data.prediction);
+                    console.log('Update received:', data.symbol, data.price, data.prediction);
                     
                     if (data.price) {
                         let currency = (data.symbol && data.symbol.includes('.NS')) ? '₹' : '$';
@@ -352,10 +366,12 @@
                     if (data.timestamp) timestampEl.innerText = new Date(data.timestamp * 1000).toLocaleTimeString();
                     
                     if (!chart) initChart();
-                    if (data.historicalData && data.historicalData.length) {
+                    if (data.historicalData && data.historicalData.length > 0) {
                         updateChart(data.historicalData);
                     } else if (data.lastCandle) {
                         addCandle(data.lastCandle);
+                    } else {
+                        console.warn('No chart data received');
                     }
                     
                     if (data.symbol && stockSelect.value !== data.symbol) {
@@ -383,6 +399,7 @@
         stockSelect.addEventListener('change', () => {
             const newStock = stockSelect.value;
             if (newStock === currentStock) return;
+            console.log('Switching to:', newStock);
             currentStock = newStock;
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(`STOCK:${newStock}`);
@@ -394,7 +411,6 @@
             if (candlestickSeries) candlestickSeries.setData([]);
         });
         
-        // Start
         connectWebSocket();
         updateBoundary();
     </script>

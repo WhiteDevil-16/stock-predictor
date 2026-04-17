@@ -12,9 +12,8 @@ import config
 from data_fetcher import DataFetcher
 from predictor import StockPredictor
 from accuracy_tracker import AccuracyTracker
-import config
 
-# Global state (module level)
+# Global state
 stock_data = {}
 current_symbol = config.STOCK_SYMBOL
 manager = None
@@ -40,7 +39,6 @@ class ConnectionManager:
                 pass
 
 def get_or_create_stock_data(symbol):
-    """Get or initialize data structures for a given stock symbol"""
     if symbol not in stock_data:
         print(f"  → Initializing data for {symbol}...")
         stock_data[symbol] = {
@@ -51,7 +49,6 @@ def get_or_create_stock_data(symbol):
             "last_candle": None,
             "last_update_time": None
         }
-        # Fetch historical data
         candles = stock_data[symbol]["fetcher"].fetch_historical_data()
         stock_data[symbol]["historical_candles"] = candles
         if candles:
@@ -62,7 +59,6 @@ def get_or_create_stock_data(symbol):
     return stock_data[symbol]
 
 async def update_stock_data(symbol):
-    """Update data for a specific stock"""
     data = get_or_create_stock_data(symbol)
     fetcher = data["fetcher"]
     predictor = data["predictor"]
@@ -74,7 +70,6 @@ async def update_stock_data(symbol):
     if quote and quote['price'] > 0:
         current_time = datetime.now().timestamp()
         
-        # Update or create candle
         if last_candle and (current_time - last_candle['time']) < 120:
             last_candle = fetcher.update_candle(last_candle, quote)
         else:
@@ -84,26 +79,22 @@ async def update_stock_data(symbol):
             if len(historical_candles) > config.MAX_CANDLES_TO_KEEP:
                 historical_candles = historical_candles[-config.MAX_CANDLES_TO_KEEP:]
         
-        # Generate prediction
         if len(historical_candles) > 5:
             closing_prices = [c['close'] for c in historical_candles] + [last_candle['close']]
             prediction = predictor.predict(closing_prices, last_candle)
         else:
             prediction = "hold"
         
-        # Track accuracy
         if tracker.last_price is not None:
             tracker.add_prediction(prediction, quote['price'])
         tracker.update_accuracy(quote['price'])
         tracker.last_price = quote['price']
         accuracy = tracker.get_recent_accuracy()
         
-        # Save updated state
         data["historical_candles"] = historical_candles
         data["last_candle"] = last_candle
         data["last_update_time"] = datetime.now()
         
-        # Prepare update message
         all_candles = historical_candles + ([last_candle] if last_candle else [])
         return {
             "symbol": symbol,
@@ -117,7 +108,6 @@ async def update_stock_data(symbol):
     return None
 
 async def periodic_updates():
-    """Background task to update the current stock and broadcast"""
     global current_symbol
     while True:
         await asyncio.sleep(config.UPDATE_INTERVAL_SECONDS)
@@ -126,28 +116,23 @@ async def periodic_updates():
             if update and manager:
                 await manager.broadcast(update)
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] {current_symbol}: ${update['price']:.2f} | {update['prediction'].upper()} | {update['accuracy']:.1f}%")
-            elif not update:
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠ No data for {current_symbol}")
         except Exception as e:
             print(f"Update error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global manager, update_task, current_symbol, stock_data
-    
+    global manager, update_task, current_symbol
     manager = ConnectionManager()
     
     print(f"\n{'='*60}")
     print(f"🚀 MULTI-STOCK PREDICTOR STARTED")
     print(f"{'='*60}")
     
-    # Pre-load popular stocks
-    default_stocks = config.DEFAULT_STOCKS
-    print(f"📊 Pre-loading {len(default_stocks)} stocks...")
+    default_stocks = ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN", "META", "NVDA", "JPM", "DOGE-USD", "BTC-USD", "ETH-USD"]
+    print(f"📊 Pre-loading {len(default_stocks)} assets...")
     for sym in default_stocks:
         get_or_create_stock_data(sym)
     
-    # Start background updater
     update_task = asyncio.create_task(periodic_updates())
     
     print(f"\n✓ Server: http://{config.HOST}:{config.PORT}")
@@ -160,7 +145,6 @@ async def lifespan(app: FastAPI):
     update_task.cancel()
     print("Shutting down...")
 
-# Create FastAPI app
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -174,12 +158,10 @@ async def get_root():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    global current_symbol  # CRITICAL: This fixes the scope error
-    
+    global current_symbol
     await manager.connect(websocket)
     print(f"📱 Client connected (Total: {len(manager.active_connections)})")
     
-    # Send initial data for current stock
     try:
         data = stock_data.get(current_symbol)
         if data and data["last_candle"]:
@@ -195,57 +177,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     "historicalData": (data["historical_candles"] + [data["last_candle"]])[-100:]
                 }
                 await websocket.send_json(init_msg)
-                print(f"  → Sent initial data for {current_symbol}: ${quote['price']:.2f}")
-            else:
-                # Fallback: send last known candle data
-                fallback_msg = {
-                    "symbol": current_symbol,
-                    "price": round(data["last_candle"]["close"], 2),
-                    "timestamp": int(datetime.now().timestamp()),
-                    "prediction": "hold",
-                    "accuracy": 0,
-                    "lastCandle": data["last_candle"],
-                    "historicalData": (data["historical_candles"] + [data["last_candle"]])[-100:]
-                }
-                await websocket.send_json(fallback_msg)
-                print(f"  → Sent fallback data for {current_symbol}")
     except Exception as e:
-        print(f"  ✗ Init send error: {e}")
+        print(f"Init send error: {e}")
     
-    # Handle incoming messages (stock change requests)
     try:
         while True:
             message = await websocket.receive_text()
             if message.startswith("STOCK:"):
                 new_symbol = message.split(":")[1].strip().upper()
                 if new_symbol != current_symbol:
-                    old_symbol = current_symbol
-                    current_symbol = new_symbol  # This now works because of 'global current_symbol'
-                    print(f"🔄 Switching stock: {old_symbol} → {current_symbol}")
-                    
-                    # Get data for new stock (will initialize if needed)
-                    data = get_or_create_stock_data(current_symbol)
-                    
-                    # Send immediate update for new stock
+                    print(f"🔄 Switching stock: {current_symbol} → {new_symbol}")
+                    current_symbol = new_symbol
                     update = await update_stock_data(current_symbol)
                     if update:
                         await websocket.send_json(update)
-                        print(f"  ✓ Sent update for {current_symbol}: ${update['price']:.2f}")
-                    elif data and data["last_candle"]:
-                        # Fallback to last known candle
-                        fallback = {
-                            "symbol": current_symbol,
-                            "price": round(data["last_candle"]["close"], 2),
-                            "timestamp": int(datetime.now().timestamp()),
-                            "prediction": "hold",
-                            "accuracy": 0,
-                            "lastCandle": data["last_candle"],
-                            "historicalData": (data["historical_candles"] + [data["last_candle"]])[-100:]
-                        }
-                        await websocket.send_json(fallback)
-                        print(f"  ✓ Sent fallback for {current_symbol}")
-                    else:
-                        print(f"  ✗ No data available for {current_symbol}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         print(f"📱 Client disconnected (Total: {len(manager.active_connections)})")
