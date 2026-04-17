@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Live Chart - Stock & Crypto Predictor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .dashboard {
+            position: fixed;
+            top: 80px;
+            left: 50px;
+            width: 850px;
+            background: rgba(20, 20, 30, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 10000;
+            transition: width 0.2s ease;
+        }
+        .header {
+            background: rgba(0,0,0,0.6);
+            padding: 12px 20px;
+            border-radius: 20px 20px 0 0;
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+        }
+        .header:active { cursor: grabbing; }
+        select {
+            background: #2a2a3e;
+            border: 1px solid #4a4a6e;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-size: 12px;
+            min-width: 200px;
+        }
+        .popout-btn, .minimize-btn, .close-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            transition: 0.2s;
+        }
+        .popout-btn { background: rgba(33,150,243,0.8); color: white; }
+        .popout-btn:hover { background: #2196f3; transform: scale(1.05); }
+        .minimize-btn { background: rgba(255,165,0,0.8); color: white; }
+        .minimize-btn:hover { background: #ff9800; transform: scale(1.05); }
+        .close-btn { background: rgba(255,80,80,0.9); color: white; }
+        .close-btn:hover { background: #f44336; }
+        .reopen-btn {
+            background: #4caf50;
+            border: none;
+            color: white;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            display: none;
+            z-index: 10001;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .content { padding: 20px; }
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .card {
+            flex: 1;
+            text-align: center;
+            background: rgba(0,0,0,0.3);
+            padding: 12px;
+            border-radius: 12px;
+        }
+        .label { display: block; color: #aaa; font-size: 12px; margin-bottom: 6px; }
+        .price { font-size: 32px; font-weight: bold; color: #4caf50; }
+        .signal {
+            font-size: 28px;
+            font-weight: bold;
+            padding: 4px 16px;
+            border-radius: 30px;
+            display: inline-block;
+        }
+        .signal.buy { background: #4caf50; color: white; animation: pulse 0.5s; }
+        .signal.sell { background: #f44336; color: white; animation: pulse 0.5s; }
+        .signal.hold { background: #ff9800; color: white; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .accuracy { font-size: 32px; font-weight: bold; color: #2196f3; }
+        .chart-container {
+            margin-top: 15px;
+            background: #1e1e2e;
+            border-radius: 12px;
+            padding: 10px;
+        }
+        .info {
+            text-align: center;
+            margin-top: 12px;
+            color: #888;
+            font-size: 11px;
+        }
+    </style>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
+</head>
+<body>
+    <button class="reopen-btn" id="reopenBtn">📈</button>
+    <div id="dashboard" class="dashboard">
+        <div class="header" id="dragHandle">
+            <div>
+                📊 Live Chart Predictor
+                <select id="stockSelect">
+                    <optgroup label="🔥 High Volatility (Best for Signals)">
+                        <option value="DOGE-USD">🐕 Dogecoin (DOGE-USD)</option>
+                        <option value="BTC-USD">₿ Bitcoin (BTC-USD)</option>
+                        <option value="ETH-USD">⟠ Ethereum (ETH-USD)</option>
+                        <option value="TSLA">🚗 Tesla (TSLA)</option>
+                        <option value="NVDA">🎮 NVIDIA (NVDA)</option>
+                        <option value="COIN">💰 Coinbase (COIN)</option>
+                    </optgroup>
+                    <optgroup label="🇺🇸 US Stocks">
+                        <option value="AAPL">🍎 Apple (AAPL)</option>
+                        <option value="MSFT">🪟 Microsoft (MSFT)</option>
+                        <option value="GOOGL">🔍 Google (GOOGL)</option>
+                        <option value="AMZN">📦 Amazon (AMZN)</option>
+                        <option value="META">📘 Meta (META)</option>
+                        <option value="JPM">🏦 JPMorgan (JPM)</option>
+                    </optgroup>
+                    <optgroup label="🇮🇳 Indian Stocks (NSE)">
+                        <option value="RELIANCE.NS">🛢️ Reliance Industries</option>
+                        <option value="TCS.NS">💻 TCS</option>
+                        <option value="INFY.NS">📊 Infosys</option>
+                        <option value="HDFCBANK.NS">🏛️ HDFC Bank</option>
+                    </optgroup>
+                    <optgroup label="₿ More Cryptocurrencies">
+                        <option value="XRP-USD">⚡ Ripple</option>
+                        <option value="SOL-USD">☀️ Solana</option>
+                        <option value="ADA-USD">🦋 Cardano</option>
+                        <option value="DOT-USD">🔗 Polkadot</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="popout-btn" id="popoutBtn" title="Desktop widget">⤴️</button>
+                <button class="minimize-btn" id="minimizeBtn">−</button>
+                <button class="close-btn" id="closeBtn">✖</button>
+            </div>
+        </div>
+        <div class="content">
+            <div class="stats">
+                <div class="card"><span class="label">💰 Price</span><div class="price" id="price">$0.00</div></div>
+                <div class="card"><span class="label">🎯 Signal</span><div class="signal" id="signal">—</div></div>
+                <div class="card"><span class="label">📈 Accuracy</span><div class="accuracy" id="accuracy">0%</div></div>
+            </div>
+            <div class="chart-container">
+                <div id="candlestickChart" style="width:100%; height:380px;"></div>
+            </div>
+            <div class="info">
+                🔄 Last update: <span id="timestamp">—</span> | 📡 Updates every 4s | 💡 Drag header | ⤴️ Popout
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const dashboard = document.getElementById('dashboard');
+        const dragHandle = document.getElementById('dragHandle');
+        const closeBtn = document.getElementById('closeBtn');
+        const reopenBtn = document.getElementById('reopenBtn');
+        const stockSelect = document.getElementById('stockSelect');
+        const minimizeBtn = document.getElementById('minimizeBtn');
+        const popoutBtn = document.getElementById('popoutBtn');
+        const dashboardContent = document.querySelector('.content');
+        const priceEl = document.getElementById('price');
+        const signalEl = document.getElementById('signal');
+        const accuracyEl = document.getElementById('accuracy');
+        const timestampEl = document.getElementById('timestamp');
+        
+        let ws = null;
+        let currentStock = 'DOGE-USD';  // Start with Dogecoin for frequent signals
+        let isMinimized = false;
+        
+        // Chart variables
+        let chart = null;
+        let candlestickSeries = null;
+        
+        // Minimize
+        function toggleMinimize() {
+            if (!isMinimized) {
+                dashboardContent.style.display = 'none';
+                dashboard.style.width = 'auto';
+                dashboard.style.minWidth = '260px';
+                minimizeBtn.textContent = '□';
+                isMinimized = true;
+            } else {
+                dashboardContent.style.display = 'block';
+                dashboard.style.width = '850px';
+                dashboard.style.minWidth = '';
+                minimizeBtn.textContent = '−';
+                isMinimized = false;
+                // Re-initialize chart if needed
+                if (!chart && document.getElementById('candlestickChart')) initChart();
+            }
+        }
+        minimizeBtn.addEventListener('click', toggleMinimize);
+        
+        // Popout
+        popoutBtn.addEventListener('click', () => {
+            const features = 'width=900,height=700,resizable=yes,scrollbars=no,status=no,toolbar=no,location=no,menubar=no,top=100,left=100';
+            const popup = window.open('/', 'StockPredictorWidget', features);
+            if (popup) popup.focus();
+            else alert('Please allow popups for this site.');
+        });
+        
+        // Chart initialization
+        function initChart() {
+            const chartElement = document.getElementById('candlestickChart');
+            if (!chartElement) return;
+            chart = LightweightCharts.createChart(chartElement, {
+                width: chartElement.clientWidth,
+                height: 380,
+                layout: { background: { color: '#1e1e2e' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                rightPriceScale: { borderColor: '#2a2e39' },
+                timeScale: { borderColor: '#2a2e39', timeVisible: true, secondsVisible: false }
+            });
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350'
+            });
+            window.addEventListener('resize', () => {
+                if (chart) chart.applyOptions({ width: chartElement.clientWidth });
+            });
+        }
+        
+        function updateChart(historicalData) {
+            if (!candlestickSeries || !historicalData || historicalData.length === 0) return;
+            const candleData = historicalData.map(c => ({
+                time: c.time,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close
+            }));
+            candlestickSeries.setData(candleData);
+        }
+        
+        function addCandle(candle) {
+            if (!candlestickSeries || !candle) return;
+            candlestickSeries.update({
+                time: candle.time,
+                open: candle.open,
+                high: candle.high,
+                low: candle.low,
+                close: candle.close
+            });
+        }
+        
+        // Dragging with boundaries
+        let isDragging = false;
+        let startX, startY, offsetX = 0, offsetY = 0;
+        function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+        function updateBoundary() {
+            let maxX = window.innerWidth - dashboard.offsetWidth;
+            let maxY = window.innerHeight - dashboard.offsetHeight;
+            offsetX = clamp(offsetX, 0, maxX);
+            offsetY = clamp(offsetY, 0, maxY);
+            dashboard.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+        }
+        dragHandle.addEventListener('mousedown', (e) => {
+            if (e.target === closeBtn || e.target === stockSelect || e.target === minimizeBtn || e.target === popoutBtn) return;
+            isDragging = true;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+            dashboard.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            let newX = e.clientX - startX;
+            let newY = e.clientY - startY;
+            let maxX = window.innerWidth - dashboard.offsetWidth;
+            let maxY = window.innerHeight - dashboard.offsetHeight;
+            newX = clamp(newX, 0, maxX);
+            newY = clamp(newY, 0, maxY);
+            offsetX = newX;
+            offsetY = newY;
+            dashboard.style.transform = `translate(${newX}px, ${newY}px)`;
+        });
+        window.addEventListener('mouseup', () => { isDragging = false; dashboard.style.cursor = ''; });
+        window.addEventListener('resize', () => updateBoundary());
+        
+        // Close/Reopen
+        closeBtn.addEventListener('click', () => {
+            dashboard.style.display = 'none';
+            reopenBtn.style.display = 'flex';
+        });
+        reopenBtn.addEventListener('click', () => {
+            dashboard.style.display = 'block';
+            reopenBtn.style.display = 'none';
+            updateBoundary();
+        });
+        
+        // WebSocket
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const wsUrl = `${protocol}//${window.location.host}/ws`;
+ws = new WebSocket(wsUrl);
+            ws.onopen = () => {
+                console.log('✅ Connected');
+                signalEl.innerText = 'CONNECTED';
+                signalEl.className = 'signal hold';
+            };
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Update:', data.symbol, data.price, data.prediction);
+                    
+                    // Update price and signal
+                    if (data.price) {
+                        let currency = (data.symbol && data.symbol.includes('.NS')) ? '₹' : '$';
+                        priceEl.innerText = `${currency}${data.price.toFixed(2)}`;
+                        priceEl.style.transform = 'scale(1.05)';
+                        setTimeout(() => priceEl.style.transform = 'scale(1)', 200);
+                    }
+                    if (data.prediction) {
+                        signalEl.innerText = data.prediction.toUpperCase();
+                        signalEl.className = `signal ${data.prediction}`;
+                    }
+                    if (data.accuracy !== undefined) accuracyEl.innerText = `${data.accuracy.toFixed(1)}%`;
+                    if (data.timestamp) timestampEl.innerText = new Date(data.timestamp * 1000).toLocaleTimeString();
+                    
+                    // Update chart
+                    if (!chart) initChart();
+                    if (data.historicalData && data.historicalData.length) {
+                        updateChart(data.historicalData);
+                    } else if (data.lastCandle) {
+                        addCandle(data.lastCandle);
+                    }
+                    
+                    if (data.symbol && stockSelect.value !== data.symbol) {
+                        stockSelect.value = data.symbol;
+                        currentStock = data.symbol;
+                    }
+                } catch(e) { console.error(e); }
+            };
+            ws.onclose = () => setTimeout(connectWebSocket, 3000);
+        }
+        
+        // Stock change
+        stockSelect.addEventListener('change', () => {
+            const newStock = stockSelect.value;
+            if (newStock === currentStock) return;
+            currentStock = newStock;
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(`STOCK:${newStock}`);
+            priceEl.innerText = '$0.00';
+            signalEl.innerText = 'LOADING...';
+            signalEl.className = 'signal hold';
+            accuracyEl.innerText = '0%';
+            if (candlestickSeries) candlestickSeries.setData([]);
+        });
+        
+        connectWebSocket();
+        updateBoundary();
+    </script>
+</body>
+</html>
