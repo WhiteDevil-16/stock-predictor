@@ -4,7 +4,7 @@ Configuration settings for the stock predictor
 
 # Stock settings - You can change this to any symbol
 STOCK_SYMBOL = "AAPL"  # Default symbol
-UPDATE_INTERVAL_SECONDS = 4
+UPDATE_INTERVAL_SECONDS = 2
 
 # Technical indicator parameters
 SHORT_EMA_PERIOD = 5
@@ -19,7 +19,7 @@ HISTORICAL_DAYS = 30
 MAX_CANDLES_TO_KEEP = 200
 
 # Accuracy tracking
-PREDICTION_LOOKBACK_INTERVALS = 5
+PREDICTION_LOOKBACK_INTERVALS = 10
 PRICE_CHANGE_THRESHOLD = 0.005
 
 # Server settings
