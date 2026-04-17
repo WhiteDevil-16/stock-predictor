@@ -323,7 +323,7 @@
             updateBoundary();
         });
         
-        // WebSocket connection (dynamic URL for Render)
+        // WebSocket connection
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -341,21 +341,17 @@
                     const data = JSON.parse(event.data);
                     console.log('Update received:', data.symbol, data.price, data.prediction);
                     
-                    // Update price and currency
                     if (data.price) {
                         let currency = (data.symbol && data.symbol.includes('.NS')) ? '₹' : '$';
                         priceEl.innerText = `${currency}${data.price.toFixed(2)}`;
                         priceEl.style.transform = 'scale(1.05)';
                         setTimeout(() => priceEl.style.transform = 'scale(1)', 200);
                     }
-                    // Update signal
                     if (data.prediction) {
                         signalEl.innerText = data.prediction.toUpperCase();
                         signalEl.className = `signal ${data.prediction}`;
                     }
-                    // Update accuracy
                     if (data.accuracy !== undefined) accuracyEl.innerText = `${data.accuracy.toFixed(1)}%`;
-                    // Update timestamp
                     if (data.timestamp) timestampEl.innerText = new Date(data.timestamp * 1000).toLocaleTimeString();
                     
                     // If symbol changed externally, update dropdown and reload TradingView chart
@@ -381,7 +377,7 @@
             };
         }
         
-        // Stock selector change (reload TradingView chart)
+        // Stock selector change
         stockSelect.addEventListener('change', () => {
             const newStock = stockSelect.value;
             if (newStock === currentStock) return;
@@ -390,16 +386,14 @@
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(`STOCK:${newStock}`);
             }
-            // Reset UI
             priceEl.innerText = '$0.00';
             signalEl.innerText = 'LOADING...';
             signalEl.className = 'signal hold';
             accuracyEl.innerText = '0%';
-            // Load new TradingView chart immediately
             loadTradingViewChart(newStock);
         });
         
-        // Initialize: load TradingView chart for default stock
+        // Initialize
         loadTradingViewChart(currentStock);
         connectWebSocket();
         updateBoundary();
