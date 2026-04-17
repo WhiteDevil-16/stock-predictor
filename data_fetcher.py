@@ -1,8 +1,3 @@
-"""
-Fetches real-time and historical stock data from Yahoo Finance
-with mock fallback to always provide chart data.
-"""
-
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
@@ -16,7 +11,7 @@ class DataFetcher:
         self.historical_data = []
         
     def fetch_historical_data(self, days=config.HISTORICAL_DAYS):
-        """Fetch historical data – fallback to mock if fails"""
+        # Try real data first
         try:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
@@ -35,32 +30,49 @@ class DataFetcher:
                         "volume": int(row['Volume']) if not pd.isna(row['Volume']) else 0
                     })
                 self.historical_data = candles
-                print(f"✓ Fetched {len(candles)} candles for {self.symbol}")
+                print(f"✓ Real candles for {self.symbol}: {len(candles)}")
                 return candles
         except Exception as e:
-            print(f"Fetch error: {e}")
+            print(f"Real data error for {self.symbol}: {e}")
         
-        # Fallback: generate mock candles so chart always shows something
-        print(f"⚠️ Using mock candles for {self.symbol}")
+        # ----- MOCK CANDLES (ensures chart always shows) -----
+        print(f"⚠️ Generating mock candles for {self.symbol}")
         candles = []
         now = datetime.now()
-        price = 100.0
+        base_price = 100.0
+        # Use different base price for different symbols to avoid flat lines
+        if self.symbol == "BTC-USD":
+            base_price = 76000
+        elif self.symbol == "ETH-USD":
+            base_price = 3500
+        elif self.symbol == "DOGE-USD":
+            base_price = 0.15
+        elif self.symbol == "AAPL":
+            base_price = 260
+        elif self.symbol == "TSLA":
+            base_price = 180
+        else:
+            base_price = 100
+            
+        price = base_price
         for i in range(100):
             ts = now - timedelta(minutes=5*i)
-            price += random.uniform(-1, 1)
+            # Random walk
+            price += random.uniform(-price*0.02, price*0.02)
+            price = max(price, base_price*0.5)
             candles.append({
                 "time": int(ts.timestamp()),
-                "open": round(price - 0.2, 2),
-                "high": round(price + 0.3, 2),
-                "low": round(price - 0.3, 2),
+                "open": round(price - price*0.005, 2),
+                "high": round(price + price*0.01, 2),
+                "low": round(price - price*0.01, 2),
                 "close": round(price, 2),
-                "volume": random.randint(1000, 10000)
+                "volume": random.randint(1000, 100000)
             })
         self.historical_data = candles[::-1]
         return self.historical_data
     
     def get_live_quote(self):
-        """Get current live price with fallback"""
+        # Try real quote
         try:
             data = self.ticker.history(period="1d", interval="1m")
             if not data.empty:
@@ -71,11 +83,10 @@ class DataFetcher:
                 }
         except:
             pass
-        
-        # Fallback: random walk for demo
+        # Mock quote
         if not hasattr(self, 'mock_price'):
-            self.mock_price = 100.0
-        self.mock_price += random.uniform(-0.5, 0.5)
+            self.mock_price = 76000 if self.symbol == "BTC-USD" else 260
+        self.mock_price += random.uniform(-self.mock_price*0.005, self.mock_price*0.005)
         self.mock_price = max(self.mock_price, 10)
         return {
             "price": round(self.mock_price, 2),
@@ -84,7 +95,6 @@ class DataFetcher:
         }
     
     def update_candle(self, current_candle, new_quote):
-        """Update current minute candle"""
         if current_candle and new_quote:
             current_candle['high'] = max(current_candle['high'], new_quote['price'])
             current_candle['low'] = min(current_candle['low'], new_quote['price'])
@@ -93,7 +103,6 @@ class DataFetcher:
         return current_candle
     
     def create_new_candle(self, quote):
-        """Create new candle for next minute"""
         return {
             "time": quote['timestamp'],
             "open": quote['price'],
